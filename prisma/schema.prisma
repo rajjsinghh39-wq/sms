@@ -1,0 +1,594 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id         String  @id
+  username   String  @unique
+  accessCode String? @unique
+  notifications Notification[]
+}
+
+model Announcement {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  date        DateTime
+  classId     Int?
+  class       Class?   @relation(fields: [classId], references: [id])
+}
+
+model Assignment {
+  id        Int      @id @default(autoincrement())
+  title     String
+  startDate DateTime
+  dueDate   DateTime
+  lessonId  Int
+  lesson    Lesson   @relation(fields: [lessonId], references: [id])
+  results   Result[]
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  present   Boolean
+  studentId String
+  lessonId  Int
+  lesson    Lesson   @relation(fields: [lessonId], references: [id])
+  student   Student  @relation(fields: [studentId], references: [id])
+}
+
+model Class {
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  capacity      Int
+  supervisorId  String?
+  gradeId       Int
+  announcements Announcement[]
+  grade         Grade          @relation(fields: [gradeId], references: [id])
+  teacher       Teacher?       @relation(fields: [supervisorId], references: [id])
+  events        Event[]
+  lessons       Lesson[]
+  students      Student[]
+}
+
+model Conversation {
+  id            Int             @id @default(autoincrement())
+  user1Id       String
+  user2Id       String
+  isClosed      Boolean         @default(false)
+  closedBy      String?
+  createdAt     DateTime        @default(now())
+  messages      DirectMessage[] @relation("ConversationToDirectMessage")
+
+  @@unique([user1Id, user2Id])
+}
+
+model Course {
+  id               Int                @id @default(autoincrement())
+  slug             String             @unique @default("")
+  title            String
+  description      String
+  status           CourseStatus       @default(PENDING)
+  createdAt        DateTime           @default(now())
+  teacherId        String
+  teacher          Teacher            @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  enrollments      CourseEnrollment[]
+  reviews          CourseReview[]
+  sections         CourseSection[]
+}
+
+model CourseEnrollment {
+  id         Int      @id @default(autoincrement())
+  enrolledAt DateTime @default(now())
+  courseId   Int
+  studentId  String
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, studentId])
+}
+
+model CourseLecture {
+  id             Int              @id @default(autoincrement())
+  title          String
+  videoUrl       String
+  order          Int
+  sectionId      Int
+  section        CourseSection    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  progress       CourseProgress[]
+}
+
+model CourseProgress {
+  id            Int           @id @default(autoincrement())
+  completed     Boolean       @default(false)
+  lectureId     Int
+  studentId     String
+  lecture       CourseLecture @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([lectureId, studentId])
+}
+
+model CourseReview {
+  id        Int      @id @default(autoincrement())
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  courseId  Int
+  studentId String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model CourseSection {
+  id            Int             @id @default(autoincrement())
+  title         String
+  order         Int
+  courseId      Int
+  lectures      CourseLecture[]
+  course        Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model DirectMessage {
+  id                    Int                     @id @default(autoincrement())
+  content               String
+  messageType           String                  @default("TEXT")
+  commandKey            String?
+  commandLabel          String?
+  commandUrl            String?
+  createdAt             DateTime                @default(now())
+  senderId              String
+  conversationId        Int
+  isRead                Boolean                 @default(false)
+  replyToId             Int?
+  conversation          Conversation            @relation("ConversationToDirectMessage", fields: [conversationId], references: [id], onDelete: Cascade)
+  replyTo               DirectMessage?          @relation("DirectMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies               DirectMessage[]         @relation("DirectMessageReply")
+  reactions             DirectMessageReaction[]
+  poll                  Poll?
+}
+
+model DirectMessageReaction {
+  id            Int           @id @default(autoincrement())
+  messageId     Int
+  userId        String
+  emoji         String
+  message       DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+model UserBlock {
+  id        Int      @id @default(autoincrement())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+model Poll {
+  id              Int            @id @default(autoincrement())
+  question        String
+  createdAt       DateTime       @default(now())
+  directMessageId Int?           @unique
+  groupMessageId  Int?           @unique
+  directMessage   DirectMessage? @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+  groupMessage    GroupMessage?  @relation(fields: [groupMessageId], references: [id], onDelete: Cascade)
+  options         PollOption[]
+  votes           PollVote[]
+}
+
+model PollOption {
+  id     Int    @id @default(autoincrement())
+  text   String
+  pollId Int
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes  PollVote[]
+
+  @@index([pollId])
+}
+
+model PollVote {
+  id        Int      @id @default(autoincrement())
+  pollId    Int
+  optionId  Int
+  userId    String
+  createdAt DateTime @default(now())
+  poll      Poll      @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([optionId])
+}
+
+model Event {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  startTime   DateTime
+  endTime     DateTime
+  classId     Int?
+  class       Class?   @relation(fields: [classId], references: [id])
+}
+
+model Exam {
+  id        Int      @id @default(autoincrement())
+  title     String
+  startTime DateTime
+  endTime   DateTime
+  lessonId  Int
+  lesson    Lesson   @relation(fields: [lessonId], references: [id])
+  results   Result[]
+}
+
+model Grade {
+  id      Int       @id @default(autoincrement())
+  level   Int       @unique
+  classes   Class[]
+  students  Student[]
+}
+
+model GroupChat {
+  id           Int            @id @default(autoincrement())
+  name         String
+  description  String?
+  accessCode   String         @unique
+  createdAt    DateTime       @default(now())
+  createdById  String
+  members      GroupMember[]
+  messages     GroupMessage[]
+}
+
+model GroupMember {
+  id          Int       @id @default(autoincrement())
+  userId      String
+  userRole    String
+  username    String
+  displayName String
+  isOwner     Boolean   @default(false)
+  joinedAt    DateTime  @default(now())
+  groupId     Int
+  lastReadAt  DateTime  @default(now())
+  isMuted     Boolean   @default(false)
+  group       GroupChat @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+}
+
+model GroupMessage {
+  id                   Int                    @id @default(autoincrement())
+  content              String
+  messageType          String                 @default("TEXT")
+  commandKey           String?
+  commandLabel         String?
+  commandUrl           String?
+  createdAt            DateTime               @default(now())
+  senderId             String
+  senderUsername       String
+  senderRole           String
+  groupId              Int
+  isRead               Boolean                @default(false)
+  replyToId            Int?
+  group                GroupChat              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  replyTo              GroupMessage?          @relation("GroupMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies              GroupMessage[]         @relation("GroupMessageReply")
+  reactions            GroupMessageReaction[]
+  poll                 Poll?
+}
+
+model GroupMessageReaction {
+  id           Int          @id @default(autoincrement())
+  messageId    Int
+  userId       String
+  emoji        String
+  message      GroupMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+model Lesson {
+  id         Int          @id @default(autoincrement())
+  name       String
+  day        Day
+  startTime  DateTime
+  endTime    DateTime
+  subjectId  Int
+  classId    Int
+  teacherId  String
+  assignments Assignment[]
+  attendances Attendance[]
+  exams       Exam[]
+  class       Class        @relation(fields: [classId], references: [id])
+  subject     Subject      @relation(fields: [subjectId], references: [id])
+  teacher     Teacher      @relation(fields: [teacherId], references: [id])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  title     String
+  message   String
+  type      NotificationType @default(GENERIC)
+  entityId  String?
+  isRead    Boolean  @default(false)
+  isViewed  Boolean  @default(false)
+  changes   Json?
+  createdAt DateTime @default(now())
+  studentId String?
+  parentId  String?
+  teacherId String?
+  adminId   String?
+  parent     Parent?  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student    Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher    Teacher? @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  admin      Admin?   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+model Parent {
+  id           String         @id
+  username     String         @unique
+  name         String
+  surname      String
+  email        String?        @unique
+  phone        String         @unique
+  address      String
+  createdAt    DateTime       @default(now())
+  accessCode   String?        @unique
+  notifications Notification[]
+  students      Student[]
+  tickets      Ticket[]
+}
+
+model ProfileAccess {
+  id        String   @id
+  userId    String
+  userType  String
+  code      String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model PublicTicket {
+  id                  Int                   @id @default(autoincrement())
+  code                String                @unique
+  type                String
+  subject             String
+  description         String
+  status              TicketStatus          @default(OPEN)
+  createdAt           DateTime              @default(now())
+  submitterUserId     String?
+  submitterRole       String?
+  desiredUsername     String?
+  desiredRole         String?
+  contactEmail        String?
+  messages            PublicTicketMessage[]
+}
+
+model PublicTicketMessage {
+  id                          Int                           @id @default(autoincrement())
+  content                     String
+  messageType                 String                        @default("TEXT")
+  createdAt                   DateTime                      @default(now())
+  isAdminReply                Boolean                       @default(false)
+  senderId                    String
+  senderRole                  String
+  ticketId                    Int
+  isRead                      Boolean                       @default(false)
+  replyToId                   Int?
+  ticket                      PublicTicket                  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  replyTo                     PublicTicketMessage?          @relation("PublicTicketMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies                     PublicTicketMessage[]         @relation("PublicTicketMessageReply")
+  reactions                   PublicTicketMessageReaction[]
+}
+
+model PublicTicketMessageReaction {
+  id                  Int                 @id @default(autoincrement())
+  messageId           Int
+  userId              String
+  emoji               String
+  message             PublicTicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+model Result {
+  id           Int         @id @default(autoincrement())
+  score        Int
+  examId       Int?
+  assignmentId Int?
+  studentId    String
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id])
+  exam         Exam?       @relation(fields: [examId], references: [id])
+  student      Student     @relation(fields: [studentId], references: [id])
+}
+
+model Student {
+  id               String             @id
+  username         String             @unique
+  name             String
+  surname          String
+  email            String?            @unique
+  phone            String?            @unique
+  address          String
+  img              String?
+  bloodType        String
+  sex              UserSex
+  createdAt        DateTime           @default(now())
+  parentId         String
+  classId          Int
+  gradeId          Int
+  birthday         DateTime
+  accessCode       String?            @unique
+  attendances      Attendance[]
+  enrollments      CourseEnrollment[]
+  progress         CourseProgress[]
+  reviews          CourseReview[]
+  notifications    Notification[]
+  results          Result[]
+  class            Class              @relation(fields: [classId], references: [id])
+  grade            Grade              @relation(fields: [gradeId], references: [id])
+  parent           Parent             @relation(fields: [parentId], references: [id])
+  tickets          Ticket[]
+}
+
+model Subject {
+  id      Int       @id @default(autoincrement())
+  name    String    @unique
+  lessons  Lesson[]
+  teachers Teacher[]
+}
+
+model Teacher {
+  id                String              @id
+  username          String              @unique
+  name              String
+  surname           String
+  email             String?             @unique
+  phone             String?             @unique
+  address           String
+  img               String?
+  bloodType         String
+  sex               UserSex
+  createdAt         DateTime            @default(now())
+  birthday          DateTime
+  accessCode        String?             @unique
+  classes           Class[]
+  courses           Course[]
+  lessons           Lesson[]
+  notifications     Notification[]
+  attendances       TeacherAttendance[]
+  tickets           Ticket[]
+  subjects          Subject[]
+}
+
+model TeacherAttendance {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  present   Boolean
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+}
+
+model Ticket {
+  id            Int             @id @default(autoincrement())
+  subject       String
+  description   String
+  status        TicketStatus    @default(OPEN)
+  category      String          @default("other")
+  createdAt     DateTime        @default(now())
+  studentId     String?
+  parentId      String?
+  teacherId     String?
+  parent        Parent?         @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student       Student?        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher       Teacher?        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  messages      TicketMessage[]
+}
+
+model TicketMessage {
+  id                    Int                     @id @default(autoincrement())
+  content               String
+  messageType           String                  @default("TEXT")
+  isRead                Boolean                 @default(false)
+  createdAt             DateTime                @default(now())
+  ticketId              Int
+  senderId              String
+  senderRole            String
+  replyToId             Int?
+  ticket                Ticket                  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  replyTo               TicketMessage?          @relation("TicketMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies               TicketMessage[]         @relation("TicketMessageReply")
+  reactions             TicketMessageReaction[]
+}
+
+model TicketMessageReaction {
+  id            Int           @id @default(autoincrement())
+  messageId     Int
+  userId        String
+  emoji         String
+  message       TicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+enum CourseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum Day {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+}
+
+enum TicketStatus {
+  OPEN
+  RESOLVED
+  CLOSED
+}
+
+enum UserSex {
+  MALE
+  FEMALE
+}
+
+enum NotificationType {
+  GENERIC
+  TEACHER_CREATED
+  TEACHER_UPDATED
+  TEACHER_DELETED
+  STUDENT_CREATED
+  STUDENT_UPDATED
+  STUDENT_DELETED
+  PARENT_CREATED
+  PARENT_UPDATED
+  PARENT_DELETED
+  GRADE_CREATED
+  GRADE_UPDATED
+  GRADE_DELETED
+  CLASS_CREATED
+  CLASS_UPDATED
+  CLASS_DELETED
+  LESSON_CREATED
+  LESSON_UPDATED
+  LESSON_DELETED
+  COURSE_SUBMITTED
+  COURSE_APPROVED
+  COURSE_REJECTED
+  COURSE_EXPIRED
+  COURSE_UNEXPIRED
+  COURSE_UPDATED
+  COURSE_DELETED
+  COURSE_ENROLLMENT
+  EXAM_CREATED
+  EXAM_UPDATED
+  EXAM_DELETED
+  ASSIGNMENT_CREATED
+  ASSIGNMENT_UPDATED
+  ASSIGNMENT_DELETED
+  RESULT_POSTED
+  RESULT_UPDATED
+  RESULT_DELETED
+  EVENT_CREATED
+  EVENT_UPDATED
+  EVENT_DELETED
+  ANNOUNCEMENT_CREATED
+  ANNOUNCEMENT_UPDATED
+  ANNOUNCEMENT_DELETED
+  TICKET_CREATED
+  TICKET_UPDATED
+  TICKET_DELETED
+}
